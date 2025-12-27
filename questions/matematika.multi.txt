@@ -1,0 +1,12 @@
+Otázka: Kolik je 7 × 8?
+Odpověď: 56
+---
+Otázka: Jaký je výsledek: 144 / 12?
+Odpověď: 12
+---
+Otázka: Kolik stupňů má součet úhlů v trojúhelníku?
+A) 90
+B) 180
+C) 270
+D) 360
+Odpověď: B
