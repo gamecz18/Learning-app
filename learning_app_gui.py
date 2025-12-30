@@ -194,6 +194,16 @@ class LearningAppGUI:
         self.feedback_label = ttk.Label(self.main_frame, text="", font=("Arial", 12))
         self.feedback_label.pack(pady=10)
 
+        # Note label (pro poznámky)
+        self.note_label = ttk.Label(
+            self.main_frame,
+            text="",
+            font=("Arial", 11, "italic"),
+            foreground="gray",
+            wraplength=600
+        )
+        self.note_label.pack(pady=5)
+
         # Tlačítka
         btn_frame = ttk.Frame(self.main_frame)
         btn_frame.pack(pady=20)
@@ -228,6 +238,16 @@ class LearningAppGUI:
         # Feedback label
         self.feedback_label = ttk.Label(self.main_frame, text="", font=("Arial", 12))
         self.feedback_label.pack(pady=10)
+
+        # Note label (pro poznámky)
+        self.note_label = ttk.Label(
+            self.main_frame,
+            text="",
+            font=("Arial", 11, "italic"),
+            foreground="gray",
+            wraplength=600
+        )
+        self.note_label.pack(pady=5)
 
         # Tlačítka
         btn_frame = ttk.Frame(self.main_frame)
@@ -282,6 +302,10 @@ class LearningAppGUI:
                 foreground="red"
             )
 
+        # Zobrazení poznámky
+        if question.note:
+            self.note_label.config(text=f"📌 {question.note}")
+
         self.check_btn.config(state=tk.DISABLED)
         self.next_btn.config(state=tk.NORMAL)
 
@@ -308,6 +332,10 @@ class LearningAppGUI:
                 foreground="red"
             )
             self.override_btn.config(state=tk.NORMAL)
+
+        # Zobrazení poznámky
+        if question.note:
+            self.note_label.config(text=f"📌 {question.note}")
 
         self.check_btn.config(state=tk.DISABLED)
         self.next_btn.config(state=tk.NORMAL)

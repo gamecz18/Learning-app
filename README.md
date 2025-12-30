@@ -33,6 +33,7 @@ B) Praha
 C) Ostrava
 D) Plzeň
 Odpověď: B
+Poznámka: Praha má přibližně 1,3 milionu obyvatel.
 ```
 
 ### Multi soubor (name.multi.txt)
@@ -60,6 +61,15 @@ Bez možností A-D:
 ```
 Otázka: Jak se jmenuje nejdelší řeka v ČR?
 Odpověď: Vltava
+```
+
+### Poznámky (volitelné)
+Ke každé otázce lze přidat poznámku, která se zobrazí po odpovědi:
+
+```
+Otázka: Text otázky?
+Odpověď: B
+Poznámka: Doplňující informace k otázce.
 ```
 
 ## Struktura
