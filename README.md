@@ -4,9 +4,17 @@ Aplikace pro učení pomocí otázek v Pythonu.
 
 ## Spuštění
 
+### Terminálová verze
 ```bash
 python3 learning_app.py
 ```
+
+### GUI verze (grafické rozhraní)
+```bash
+python3 learning_app_gui.py
+```
+
+> GUI vyžaduje tkinter (součást standardní instalace Pythonu)
 
 ## Typy otázek
 
@@ -58,7 +66,8 @@ Odpověď: Vltava
 
 ```
 Learning-app/
-├── learning_app.py      # Hlavní aplikace
+├── learning_app.py      # Terminálová verze
+├── learning_app_gui.py  # GUI verze
 ├── questions/           # Složka s otázkami
 │   ├── *.single.txt     # Soubory s jednou otázkou
 │   └── *.multi.txt      # Soubory s více otázkami
