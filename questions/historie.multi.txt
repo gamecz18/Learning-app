@@ -4,6 +4,7 @@ B) 1918
 C) 1920
 D) 1938
 Odpověď: B
+Poznámka: Československo bylo vyhlášeno 28. října 1918 v Praze.
 ---
 Otázka: Kdo byl první prezident Československa?
 A) Edvard Beneš
@@ -11,6 +12,7 @@ B) Klement Gottwald
 C) Tomáš Garrigue Masaryk
 D) Václav Havel
 Odpověď: C
+Poznámka: T. G. Masaryk byl prezidentem v letech 1918-1935.
 ---
 Otázka: Ve kterém roce proběhla Sametová revoluce?
 A) 1968
@@ -18,3 +20,4 @@ B) 1989
 C) 1993
 D) 2004
 Odpověď: B
+Poznámka: Sametová revoluce začala 17. listopadu 1989 a vedla k pádu komunistického režimu.

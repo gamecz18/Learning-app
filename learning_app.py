@@ -22,6 +22,7 @@ class Question:
     correct_answer: str
     is_open: bool = False  # True pro otevřené otázky
     source_file: str = ""
+    note: str = ""  # Poznámka k otázce (zobrazí se po odpovědi)
 
 
 def parse_question_block(block: str, source_file: str = "") -> Optional[Question]:
@@ -35,10 +36,12 @@ def parse_question_block(block: str, source_file: str = "") -> Optional[Question
         C) Třetí možnost
         D) Čtvrtá možnost
         Odpověď: B
+        Poznámka: Doplňující informace
 
     Formát pro otevřené otázky:
         Otázka: Text otázky?
         Odpověď: Správná odpověď
+        Poznámka: Doplňující informace
     """
     lines = [line.strip() for line in block.strip().split('\n') if line.strip()]
 
@@ -48,6 +51,7 @@ def parse_question_block(block: str, source_file: str = "") -> Optional[Question
     question_text = ""
     options = {}
     correct_answer = ""
+    note = ""
 
     for line in lines:
         # Otázka
@@ -61,6 +65,9 @@ def parse_question_block(block: str, source_file: str = "") -> Optional[Question
         # Odpověď
         elif line.lower().startswith("odpověď:") or line.lower().startswith("odpoved:"):
             correct_answer = line.split(":", 1)[1].strip()
+        # Poznámka
+        elif line.lower().startswith("poznámka:") or line.lower().startswith("poznamka:"):
+            note = line.split(":", 1)[1].strip()
 
     if not question_text or not correct_answer:
         return None
@@ -73,7 +80,8 @@ def parse_question_block(block: str, source_file: str = "") -> Optional[Question
         options=options,
         correct_answer=correct_answer,
         is_open=is_open,
-        source_file=source_file
+        source_file=source_file,
+        note=note
     )
 
 
@@ -156,6 +164,10 @@ def ask_abcd_question(question: Question) -> bool:
         if question.correct_answer.upper() in question.options:
             print(f"   → {question.options[question.correct_answer.upper()]}")
 
+    # Zobrazení poznámky
+    if question.note:
+        print(f"\n📌 Poznámka: {question.note}")
+
     return correct
 
 
@@ -179,6 +191,10 @@ def ask_open_question(question: Question) -> bool:
         if override == 'a':
             correct = True
             print("✅ Označeno jako správné.")
+
+    # Zobrazení poznámky
+    if question.note:
+        print(f"\n📌 Poznámka: {question.note}")
 
     return correct
 
