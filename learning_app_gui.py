@@ -39,6 +39,7 @@ class LearningAppGUI:
         self.wrong_questions: list[Question] = []  # Špatně zodpovězené otázky pro focus mode
         self.focus_mode_enabled = False  # Toggle pro focus mode
         self.review_index = 0  # Index pro review mode
+        self.browse_index = 0  # Index pro browse mode (prohlížení všech otázek)
 
         # Styl
         self.style = ttk.Style()
@@ -141,6 +142,14 @@ class LearningAppGUI:
 
         ttk.Button(
             btn_frame,
+            text="📖 Procházet všechny otázky",
+            style="Big.TButton",
+            command=self.start_browse,
+            width=35
+        ).pack(pady=5)
+
+        ttk.Button(
+            btn_frame,
             text="🔄 Znovu načíst otázky",
             style="Big.TButton",
             command=self.reload_questions,
@@ -169,6 +178,7 @@ class LearningAppGUI:
         """Spustí kvíz."""
         # Resetování výsledků kvízu
         self.quiz_results = []
+        self.quiz_answers = {}  # Slovník pro ukládání odpovědí podle indexu
 
         # Výběr otázek podle typu a focus mode
         if self.focus_mode_enabled and self.wrong_questions:
@@ -237,7 +247,10 @@ class LearningAppGUI:
 
     def show_abcd_question(self, question: Question):
         """Zobrazí ABCD otázku."""
-        self.selected_option = tk.StringVar(value="")
+        # Zkontroluj, jestli už byla otázka zodpovězena
+        prev_answer = self.quiz_answers.get(self.current_index)
+
+        self.selected_option = tk.StringVar(value=prev_answer["answer"] if prev_answer else "")
 
         options_frame = ttk.Frame(self.main_frame)
         options_frame.pack(fill=tk.X, pady=10)
@@ -251,10 +264,25 @@ class LearningAppGUI:
                 style="Option.TRadiobutton"
             )
             rb.pack(anchor="w", pady=5, padx=20)
+            # Pokud už bylo zodpovězeno, zakázat změnu
+            if prev_answer:
+                rb.config(state=tk.DISABLED)
 
         # Feedback label
         self.feedback_label = ttk.Label(self.main_frame, text="", font=("Arial", 12))
         self.feedback_label.pack(pady=10)
+
+        # Zobrazení předchozí odpovědi
+        if prev_answer:
+            self.answered = True
+            if prev_answer["correct"]:
+                self.feedback_label.config(text="✅ Správně!", foreground="green")
+            else:
+                correct_text = question.options.get(question.correct_answer.upper(), "")
+                self.feedback_label.config(
+                    text=f"❌ Špatně. Správná odpověď: {question.correct_answer}) {correct_text}",
+                    foreground="red"
+                )
 
         # Note label (pro poznámky)
         self.note_label = ttk.Label(
@@ -266,15 +294,30 @@ class LearningAppGUI:
         )
         self.note_label.pack(pady=5)
 
+        # Zobrazit poznámku pokud už bylo zodpovězeno
+        if prev_answer and question.note:
+            self.note_label.config(text=f"📌 {question.note}")
+
         # Tlačítka
         btn_frame = ttk.Frame(self.main_frame)
         btn_frame.pack(pady=20)
+
+        # Tlačítko zpět
+        self.prev_btn = ttk.Button(
+            btn_frame,
+            text="← Zpět",
+            command=self.prev_question,
+            style="Big.TButton",
+            state=tk.NORMAL if self.current_index > 0 else tk.DISABLED
+        )
+        self.prev_btn.pack(side=tk.LEFT, padx=5)
 
         self.check_btn = ttk.Button(
             btn_frame,
             text="✓ Zkontrolovat",
             command=lambda: self.check_abcd_answer(question),
-            style="Big.TButton"
+            style="Big.TButton",
+            state=tk.DISABLED if prev_answer else tk.NORMAL
         )
         self.check_btn.pack(side=tk.LEFT, padx=5)
 
@@ -283,23 +326,41 @@ class LearningAppGUI:
             text="→ Další",
             command=self.next_question,
             style="Big.TButton",
-            state=tk.DISABLED
+            state=tk.NORMAL if prev_answer else tk.DISABLED
         )
         self.next_btn.pack(side=tk.LEFT, padx=5)
 
     def show_open_question(self, question: Question):
         """Zobrazí otevřenou otázku."""
+        # Zkontroluj, jestli už byla otázka zodpovězena
+        prev_answer = self.quiz_answers.get(self.current_index)
+
         # Vstupní pole
         self.answer_entry = ttk.Entry(self.main_frame, font=("Arial", 14), width=40)
         self.answer_entry.pack(pady=10)
-        self.answer_entry.focus()
 
-        # Bind Enter key
-        self.answer_entry.bind("<Return>", lambda e: self.check_open_answer(question))
+        if prev_answer:
+            self.answer_entry.insert(0, prev_answer["answer"])
+            self.answer_entry.config(state=tk.DISABLED)
+            self.answered = True
+        else:
+            self.answer_entry.focus()
+            # Bind Enter key
+            self.answer_entry.bind("<Return>", lambda e: self.check_open_answer(question))
 
         # Feedback label
         self.feedback_label = ttk.Label(self.main_frame, text="", font=("Arial", 12))
         self.feedback_label.pack(pady=10)
+
+        # Zobrazení předchozí odpovědi
+        if prev_answer:
+            if prev_answer["correct"]:
+                self.feedback_label.config(text="✅ Správně!", foreground="green")
+            else:
+                self.feedback_label.config(
+                    text=f"❌ Špatně. Správná odpověď: {question.correct_answer}",
+                    foreground="red"
+                )
 
         # Note label (pro poznámky)
         self.note_label = ttk.Label(
@@ -311,15 +372,30 @@ class LearningAppGUI:
         )
         self.note_label.pack(pady=5)
 
+        # Zobrazit poznámku pokud už bylo zodpovězeno
+        if prev_answer and question.note:
+            self.note_label.config(text=f"📌 {question.note}")
+
         # Tlačítka
         btn_frame = ttk.Frame(self.main_frame)
         btn_frame.pack(pady=20)
+
+        # Tlačítko zpět
+        self.prev_btn = ttk.Button(
+            btn_frame,
+            text="← Zpět",
+            command=self.prev_question,
+            style="Big.TButton",
+            state=tk.NORMAL if self.current_index > 0 else tk.DISABLED
+        )
+        self.prev_btn.pack(side=tk.LEFT, padx=5)
 
         self.check_btn = ttk.Button(
             btn_frame,
             text="✓ Zkontrolovat",
             command=lambda: self.check_open_answer(question),
-            style="Big.TButton"
+            style="Big.TButton",
+            state=tk.DISABLED if prev_answer else tk.NORMAL
         )
         self.check_btn.pack(side=tk.LEFT, padx=5)
 
@@ -337,7 +413,7 @@ class LearningAppGUI:
             text="→ Další",
             command=self.next_question,
             style="Big.TButton",
-            state=tk.DISABLED
+            state=tk.NORMAL if prev_answer else tk.DISABLED
         )
         self.next_btn.pack(side=tk.LEFT, padx=5)
 
@@ -357,6 +433,9 @@ class LearningAppGUI:
         # Uložení výsledku
         result = QuizResult(question, answer, correct)
         self.quiz_results.append(result)
+
+        # Uložení do quiz_answers pro navigaci
+        self.quiz_answers[self.current_index] = {"answer": answer, "correct": correct}
 
         if correct:
             self.correct_count += 1
@@ -393,6 +472,9 @@ class LearningAppGUI:
         result = QuizResult(question, answer, correct)
         self.quiz_results.append(result)
 
+        # Uložení do quiz_answers pro navigaci
+        self.quiz_answers[self.current_index] = {"answer": answer, "correct": correct}
+
         if correct:
             self.correct_count += 1
             self.feedback_label.config(text="✅ Správně!", foreground="green")
@@ -420,6 +502,15 @@ class LearningAppGUI:
         # Aktualizace posledního výsledku jako správného
         if self.quiz_results:
             self.quiz_results[-1].is_correct = True
+        # Aktualizace v quiz_answers
+        if self.current_index in self.quiz_answers:
+            self.quiz_answers[self.current_index]["correct"] = True
+
+    def prev_question(self):
+        """Přejde na předchozí otázku."""
+        if self.current_index > 0:
+            self.current_index -= 1
+            self.show_question()
 
     def next_question(self):
         """Přejde na další otázku."""
@@ -703,6 +794,179 @@ class LearningAppGUI:
         """Přejde na konkrétní otázku v review."""
         self.review_index = index
         self.show_review()
+
+    def start_browse(self):
+        """Spustí procházení všech otázek."""
+        if not self.questions:
+            messagebox.showinfo("Info", "Žádné otázky k zobrazení.")
+            return
+        self.browse_index = 0
+        self.show_browse()
+
+    def show_browse(self):
+        """Zobrazí aktuální otázku v browse mode."""
+        self.clear_frame()
+
+        question = self.questions[self.browse_index]
+        total = len(self.questions)
+
+        # Header
+        header_frame = ttk.Frame(self.main_frame)
+        header_frame.pack(fill=tk.X, pady=(0, 10))
+
+        ttk.Label(
+            header_frame,
+            text=f"📖 Procházení otázek ({self.browse_index + 1}/{total})",
+            style="Title.TLabel"
+        ).pack(side=tk.LEFT)
+
+        # Typ otázky
+        q_type_text = "Otevřená" if question.is_open else "ABCD"
+        q_type_icon = "📝" if question.is_open else "🔤"
+        ttk.Label(
+            header_frame,
+            text=f"{q_type_icon} {q_type_text}",
+            font=("Arial", 12),
+            foreground="gray"
+        ).pack(side=tk.RIGHT)
+
+        # Progress bar
+        progress_bar = ttk.Progressbar(
+            self.main_frame,
+            length=600,
+            mode="determinate",
+            value=((self.browse_index + 1) / total) * 100
+        )
+        progress_bar.pack(pady=(0, 20))
+
+        # Otázka
+        q_label = ttk.Label(
+            self.main_frame,
+            text=f"❓ {question.text}",
+            style="Question.TLabel",
+            wraplength=600
+        )
+        q_label.pack(pady=(0, 15))
+
+        # Odpovědi
+        if question.is_open:
+            # Otevřená otázka
+            answer_frame = ttk.Frame(self.main_frame)
+            answer_frame.pack(fill=tk.X, pady=5, padx=20)
+
+            ttk.Label(
+                answer_frame,
+                text=f"✓ Správná odpověď: {question.correct_answer}",
+                font=("Arial", 12),
+                foreground="green"
+            ).pack(anchor="w")
+        else:
+            # ABCD otázka
+            options_frame = ttk.Frame(self.main_frame)
+            options_frame.pack(fill=tk.X, pady=5, padx=20)
+
+            for letter in sorted(question.options.keys()):
+                is_correct = letter == question.correct_answer.upper()
+                color = "green" if is_correct else "black"
+                prefix = "✓ " if is_correct else "  "
+
+                ttk.Label(
+                    options_frame,
+                    text=f"{prefix}{letter}) {question.options[letter]}",
+                    font=("Arial", 12),
+                    foreground=color
+                ).pack(anchor="w", pady=2)
+
+        # Poznámka
+        if question.note:
+            note_label = ttk.Label(
+                self.main_frame,
+                text=f"📌 {question.note}",
+                font=("Arial", 11, "italic"),
+                foreground="gray",
+                wraplength=600
+            )
+            note_label.pack(pady=15)
+
+        # Zdrojový soubor
+        if question.source_file:
+            import os
+            source_label = ttk.Label(
+                self.main_frame,
+                text=f"📁 {os.path.basename(question.source_file)}",
+                font=("Arial", 10),
+                foreground="lightgray"
+            )
+            source_label.pack(pady=5)
+
+        # Navigační tlačítka
+        nav_frame = ttk.Frame(self.main_frame)
+        nav_frame.pack(pady=20)
+
+        prev_btn = ttk.Button(
+            nav_frame,
+            text="← Předchozí",
+            command=self.prev_browse,
+            style="Big.TButton",
+            state=tk.NORMAL if self.browse_index > 0 else tk.DISABLED
+        )
+        prev_btn.pack(side=tk.LEFT, padx=10)
+
+        ttk.Button(
+            nav_frame,
+            text="🏠 Menu",
+            command=self.show_menu,
+            style="Big.TButton"
+        ).pack(side=tk.LEFT, padx=10)
+
+        next_btn = ttk.Button(
+            nav_frame,
+            text="Další →",
+            command=self.next_browse,
+            style="Big.TButton",
+            state=tk.NORMAL if self.browse_index < total - 1 else tk.DISABLED
+        )
+        next_btn.pack(side=tk.LEFT, padx=10)
+
+        # Rychlá navigace
+        jump_frame = ttk.Frame(self.main_frame)
+        jump_frame.pack(pady=10)
+
+        ttk.Label(jump_frame, text="Přejít na otázku:", foreground="gray").pack(side=tk.LEFT, padx=5)
+
+        self.jump_entry = ttk.Entry(jump_frame, width=5)
+        self.jump_entry.pack(side=tk.LEFT, padx=5)
+        self.jump_entry.bind("<Return>", lambda e: self.jump_to_browse())
+
+        ttk.Button(
+            jump_frame,
+            text="Přejít",
+            command=self.jump_to_browse
+        ).pack(side=tk.LEFT, padx=5)
+
+    def prev_browse(self):
+        """Přejde na předchozí otázku v browse mode."""
+        if self.browse_index > 0:
+            self.browse_index -= 1
+            self.show_browse()
+
+    def next_browse(self):
+        """Přejde na další otázku v browse mode."""
+        if self.browse_index < len(self.questions) - 1:
+            self.browse_index += 1
+            self.show_browse()
+
+    def jump_to_browse(self):
+        """Přejde na konkrétní otázku v browse mode."""
+        try:
+            idx = int(self.jump_entry.get()) - 1
+            if 0 <= idx < len(self.questions):
+                self.browse_index = idx
+                self.show_browse()
+            else:
+                messagebox.showwarning("Upozornění", f"Zadej číslo 1-{len(self.questions)}")
+        except ValueError:
+            messagebox.showwarning("Upozornění", "Zadej platné číslo")
 
 
 def main():
