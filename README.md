@@ -16,6 +16,21 @@ python3 learning_app_gui.py
 
 > GUI vyžaduje tkinter (součást standardní instalace Pythonu)
 
+## Funkce GUI
+
+### Responzivní design
+- **Dynamické scalování**: Aplikace se automaticky přizpůsobuje velikosti okna
+- **Scrollování**: Pokud obsah přesahuje velikost okna, můžete scrollovat kolečkem myši
+- **Minimální velikost**: 700x500 pixelů
+- **Doporučená velikost**: 900x650 pixelů
+
+### Funkce
+- **Quiz mode**: Procházení otázek s kontrolou odpovědí
+- **Focus mode**: Zaměření na špatně zodpovězené otázky
+- **Browse mode**: Prohlížení všech otázek se správnými odpověďmi
+- **Review mode**: Přehled odpovědí po dokončení kvízu
+- **Navigace**: Možnost procházet otázky vpřed i vzad během kvízu
+
 ## Typy otázek
 
 - **ABCD otázky** - výběr z možností A, B, C, D

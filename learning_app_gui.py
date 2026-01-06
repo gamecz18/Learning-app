@@ -24,8 +24,10 @@ class LearningAppGUI:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("Learning App")
-        self.root.geometry("700x500")
-        self.root.minsize(600, 400)
+        self.root.geometry("900x650")
+        self.root.minsize(700, 500)
+        self.root.geometry("900x650")
+        self.root.minsize(700, 500)
 
         # Data
         self.questions: list[Question] = []
@@ -43,13 +45,38 @@ class LearningAppGUI:
 
         # Styl
         self.style = ttk.Style()
-        self.style.configure("Title.TLabel", font=("Arial", 16, "bold"))
-        self.style.configure("Question.TLabel", font=("Arial", 14))
-        self.style.configure("Option.TRadiobutton", font=("Arial", 12))
-        self.style.configure("Big.TButton", font=("Arial", 12), padding=10)
+        self.style.configure("Title.TLabel", font=("Arial", 18, "bold"))
+        self.style.configure("Question.TLabel", font=("Arial", 13))
+        self.style.configure("Option.TRadiobutton", font=("Arial", 11))
+        self.style.configure("Big.TButton", font=("Arial", 11), padding=10)
 
-        # Hlavní kontejner
-        self.main_frame = ttk.Frame(root, padding="20")
+        # Hlavní kontejner s scrollable frame
+        self.main_canvas = tk.Canvas(root, highlightthickness=0)
+        self.scrollbar = ttk.Scrollbar(root, orient="vertical", command=self.main_canvas.yview)
+        self.scrollable_frame = ttk.Frame(self.main_canvas)
+
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.main_canvas.configure(scrollregion=self.main_canvas.bbox("all"))
+        )
+
+        self.main_canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw", tags="frame")
+        self.main_canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        # Pack scrollbar a canvas
+        self.scrollbar.pack(side="right", fill="y")
+        self.main_canvas.pack(side="left", fill="both", expand=True)
+
+        # Bind mouse wheel
+        self.main_canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+        self.main_canvas.bind_all("<Button-4>", self._on_mousewheel)
+        self.main_canvas.bind_all("<Button-5>", self._on_mousewheel)
+
+        # Bind window resize pro update canvas width
+        self.root.bind("<Configure>", self._on_window_resize)
+
+        # Main frame uvnitř scrollable frame
+        self.main_frame = ttk.Frame(self.scrollable_frame, padding="20")
         self.main_frame.pack(fill=tk.BOTH, expand=True)
 
         # Načtení otázek
@@ -57,6 +84,26 @@ class LearningAppGUI:
 
         # Zobrazení menu
         self.show_menu()
+
+    def _on_mousewheel(self, event):
+        """Zpracování scroll wheel."""
+        if event.num == 4 or event.delta > 0:
+            self.main_canvas.yview_scroll(-1, "units")
+        elif event.num == 5 or event.delta < 0:
+            self.main_canvas.yview_scroll(1, "units")
+
+    def _on_window_resize(self, event):
+        """Aktualizace canvas při změně velikosti okna."""
+        if event.widget == self.root:
+            self.main_canvas.itemconfig("frame", width=event.width - self.scrollbar.winfo_width())
+
+    def _reset_scroll(self):
+        """Reset scrollování na začátek."""
+        self.main_canvas.yview_moveto(0)
+
+    def _get_wraplength(self):
+        """Vypočítá optimální wraplength podle šířky okna."""
+        return max(400, self.root.winfo_width() - 150)
 
     def load_questions(self):
         """Načte všechny otázky."""
@@ -66,25 +113,30 @@ class LearningAppGUI:
         """Vyčistí hlavní frame."""
         for widget in self.main_frame.winfo_children():
             widget.destroy()
+        self._reset_scroll()
 
     def show_menu(self):
         """Zobrazí hlavní menu."""
         self.clear_frame()
 
+        # Centrální kontejner pro lepší vycentrování
+        center_frame = ttk.Frame(self.main_frame)
+        center_frame.pack(expand=True, fill=tk.BOTH)
+
         # Nadpis
-        title = ttk.Label(self.main_frame, text="🎓 Learning App", style="Title.TLabel")
-        title.pack(pady=(0, 30))
+        title = ttk.Label(center_frame, text="🎓 Learning App", style="Title.TLabel")
+        title.pack(pady=(20, 30))
 
         # Statistiky
         abcd_count = sum(1 for q in self.questions if not q.is_open)
         open_count = sum(1 for q in self.questions if q.is_open)
 
         stats_text = f"Načteno {len(self.questions)} otázek ({abcd_count} ABCD, {open_count} otevřených)"
-        stats = ttk.Label(self.main_frame, text=stats_text)
+        stats = ttk.Label(center_frame, text=stats_text, font=("Arial", 11))
         stats.pack(pady=(0, 20))
 
         # Focus mode toggle
-        focus_frame = ttk.Frame(self.main_frame)
+        focus_frame = ttk.Frame(center_frame)
         focus_frame.pack(pady=10)
 
         self.focus_var = tk.BooleanVar(value=self.focus_mode_enabled)
@@ -113,56 +165,26 @@ class LearningAppGUI:
             focus_info.pack()
 
         # Tlačítka
-        btn_frame = ttk.Frame(self.main_frame)
-        btn_frame.pack(pady=10)
+        btn_frame = ttk.Frame(center_frame)
+        btn_frame.pack(pady=20)
 
-        ttk.Button(
-            btn_frame,
-            text="▶ Spustit kvíz (všechny otázky)",
-            style="Big.TButton",
-            command=lambda: self.start_quiz("all"),
-            width=35
-        ).pack(pady=5)
+        buttons = [
+            ("▶ Spustit kvíz (všechny otázky)", lambda: self.start_quiz("all")),
+            ("🔤 Spustit kvíz (pouze ABCD)", lambda: self.start_quiz("abcd")),
+            ("📝 Spustit kvíz (pouze otevřené)", lambda: self.start_quiz("open")),
+            ("📖 Procházet všechny otázky", self.start_browse),
+            ("🔄 Znovu načíst otázky", self.reload_questions),
+            ("❌ Konec", self.root.quit)
+        ]
 
-        ttk.Button(
-            btn_frame,
-            text="🔤 Spustit kvíz (pouze ABCD)",
-            style="Big.TButton",
-            command=lambda: self.start_quiz("abcd"),
-            width=35
-        ).pack(pady=5)
-
-        ttk.Button(
-            btn_frame,
-            text="📝 Spustit kvíz (pouze otevřené)",
-            style="Big.TButton",
-            command=lambda: self.start_quiz("open"),
-            width=35
-        ).pack(pady=5)
-
-        ttk.Button(
-            btn_frame,
-            text="📖 Procházet všechny otázky",
-            style="Big.TButton",
-            command=self.start_browse,
-            width=35
-        ).pack(pady=5)
-
-        ttk.Button(
-            btn_frame,
-            text="🔄 Znovu načíst otázky",
-            style="Big.TButton",
-            command=self.reload_questions,
-            width=35
-        ).pack(pady=5)
-
-        ttk.Button(
-            btn_frame,
-            text="❌ Konec",
-            style="Big.TButton",
-            command=self.root.quit,
-            width=35
-        ).pack(pady=5)
+        for text, command in buttons:
+            btn = ttk.Button(
+                btn_frame,
+                text=text,
+                style="Big.TButton",
+                command=command
+            )
+            btn.pack(pady=5, fill=tk.X, padx=20)
 
     def reload_questions(self):
         """Znovu načte otázky."""
@@ -215,19 +237,21 @@ class LearningAppGUI:
 
         question = self.current_questions[self.current_index]
 
-        # Progress
+        # Progress header
+        progress_frame = ttk.Frame(self.main_frame)
+        progress_frame.pack(fill=tk.X, pady=(0, 15))
+
         progress_text = f"Otázka {self.current_index + 1} / {len(self.current_questions)}"
-        progress = ttk.Label(self.main_frame, text=progress_text)
-        progress.pack(anchor="e")
+        progress = ttk.Label(progress_frame, text=progress_text, font=("Arial", 11))
+        progress.pack(side=tk.TOP, anchor="e")
 
         # Progress bar
         progress_bar = ttk.Progressbar(
-            self.main_frame,
-            length=300,
+            progress_frame,
             mode="determinate",
             value=(self.current_index / len(self.current_questions)) * 100
         )
-        progress_bar.pack(anchor="e", pady=(0, 20))
+        progress_bar.pack(fill=tk.X, pady=(5, 0))
 
         # Otázka
         q_type = "📝" if question.is_open else "🔤"
@@ -235,9 +259,9 @@ class LearningAppGUI:
             self.main_frame,
             text=f"{q_type} {question.text}",
             style="Question.TLabel",
-            wraplength=600
+            wraplength=self._get_wraplength()
         )
-        q_label.pack(pady=(0, 20))
+        q_label.pack(pady=(10, 20), fill=tk.X)
 
         # Odpověď
         if question.is_open:
@@ -253,17 +277,20 @@ class LearningAppGUI:
         self.selected_option = tk.StringVar(value=prev_answer["answer"] if prev_answer else "")
 
         options_frame = ttk.Frame(self.main_frame)
-        options_frame.pack(fill=tk.X, pady=10)
+        options_frame.pack(fill=tk.BOTH, expand=True, pady=10)
 
         for letter in sorted(question.options.keys()):
+            option_frame = ttk.Frame(options_frame)
+            option_frame.pack(fill=tk.X, pady=5, padx=20)
+
             rb = ttk.Radiobutton(
-                options_frame,
+                option_frame,
                 text=f"{letter}) {question.options[letter]}",
                 value=letter,
                 variable=self.selected_option,
                 style="Option.TRadiobutton"
             )
-            rb.pack(anchor="w", pady=5, padx=20)
+            rb.pack(anchor="w", fill=tk.X)
             # Pokud už bylo zodpovězeno, zakázat změnu
             if prev_answer:
                 rb.config(state=tk.DISABLED)
@@ -281,7 +308,8 @@ class LearningAppGUI:
                 correct_text = question.options.get(question.correct_answer.upper(), "")
                 self.feedback_label.config(
                     text=f"❌ Špatně. Správná odpověď: {question.correct_answer}) {correct_text}",
-                    foreground="red"
+                    foreground="red",
+                    wraplength=self._get_wraplength()
                 )
 
         # Note label (pro poznámky)
@@ -290,7 +318,7 @@ class LearningAppGUI:
             text="",
             font=("Arial", 11, "italic"),
             foreground="gray",
-            wraplength=600
+            wraplength=self._get_wraplength()
         )
         self.note_label.pack(pady=5)
 
@@ -335,9 +363,12 @@ class LearningAppGUI:
         # Zkontroluj, jestli už byla otázka zodpovězena
         prev_answer = self.quiz_answers.get(self.current_index)
 
-        # Vstupní pole
-        self.answer_entry = ttk.Entry(self.main_frame, font=("Arial", 14), width=40)
-        self.answer_entry.pack(pady=10)
+        # Vstupní pole - responzivní šířka
+        entry_frame = ttk.Frame(self.main_frame)
+        entry_frame.pack(fill=tk.X, pady=10, padx=40)
+
+        self.answer_entry = ttk.Entry(entry_frame, font=("Arial", 14))
+        self.answer_entry.pack(fill=tk.X, expand=True)
 
         if prev_answer:
             self.answer_entry.insert(0, prev_answer["answer"])
@@ -359,7 +390,8 @@ class LearningAppGUI:
             else:
                 self.feedback_label.config(
                     text=f"❌ Špatně. Správná odpověď: {question.correct_answer}",
-                    foreground="red"
+                    foreground="red",
+                    wraplength=self._get_wraplength()
                 )
 
         # Note label (pro poznámky)
@@ -368,7 +400,7 @@ class LearningAppGUI:
             text="",
             font=("Arial", 11, "italic"),
             foreground="gray",
-            wraplength=600
+            wraplength=self._get_wraplength()
         )
         self.note_label.pack(pady=5)
 
@@ -444,7 +476,8 @@ class LearningAppGUI:
             correct_text = question.options.get(question.correct_answer.upper(), "")
             self.feedback_label.config(
                 text=f"❌ Špatně. Správná odpověď: {question.correct_answer}) {correct_text}",
-                foreground="red"
+                foreground="red",
+                wraplength=self._get_wraplength()
             )
 
         # Zobrazení poznámky
@@ -482,7 +515,8 @@ class LearningAppGUI:
         else:
             self.feedback_label.config(
                 text=f"❌ Špatně. Správná odpověď: {question.correct_answer}",
-                foreground="red"
+                foreground="red",
+                wraplength=self._get_wraplength()
             )
             self.override_btn.config(state=tk.NORMAL)
 
@@ -566,14 +600,16 @@ class LearningAppGUI:
         rating_label = ttk.Label(self.main_frame, text=rating, font=("Arial", 16))
         rating_label.pack(pady=10)
 
-        # Progress bar
+        # Progress bar - responzivní
+        progress_frame = ttk.Frame(self.main_frame)
+        progress_frame.pack(fill=tk.X, pady=10, padx=40)
+
         result_bar = ttk.Progressbar(
-            self.main_frame,
-            length=400,
+            progress_frame,
             mode="determinate",
             value=percentage
         )
-        result_bar.pack(pady=10)
+        result_bar.pack(fill=tk.X, expand=True)
 
         # Info o focus mode
         if self.wrong_questions:
@@ -648,14 +684,16 @@ class LearningAppGUI:
         )
         status_label.pack(side=tk.RIGHT)
 
-        # Progress bar
+        # Progress bar - responzivní
+        progress_frame = ttk.Frame(self.main_frame)
+        progress_frame.pack(fill=tk.X, pady=(0, 20), padx=40)
+
         progress_bar = ttk.Progressbar(
-            self.main_frame,
-            length=600,
+            progress_frame,
             mode="determinate",
             value=((self.review_index + 1) / total) * 100
         )
-        progress_bar.pack(pady=(0, 20))
+        progress_bar.pack(fill=tk.X, expand=True)
 
         # Otázka
         q_type = "📝" if question.is_open else "🔤"
@@ -663,9 +701,9 @@ class LearningAppGUI:
             self.main_frame,
             text=f"{q_type} {question.text}",
             style="Question.TLabel",
-            wraplength=600
+            wraplength=self._get_wraplength()
         )
-        q_label.pack(pady=(0, 15))
+        q_label.pack(pady=(0, 15), fill=tk.X)
 
         # Odpovědi
         if question.is_open:
@@ -724,7 +762,7 @@ class LearningAppGUI:
                 text=f"📌 {question.note}",
                 font=("Arial", 11, "italic"),
                 foreground="gray",
-                wraplength=600
+                wraplength=self._get_wraplength()
             )
             note_label.pack(pady=15)
 
@@ -830,21 +868,23 @@ class LearningAppGUI:
             foreground="gray"
         ).pack(side=tk.RIGHT)
 
-        # Progress bar
+        # Progress bar - responzivní
+        progress_frame_browse = ttk.Frame(self.main_frame)
+        progress_frame_browse.pack(fill=tk.X, pady=(0, 20), padx=40)
+
         progress_bar = ttk.Progressbar(
-            self.main_frame,
-            length=600,
+            progress_frame_browse,
             mode="determinate",
             value=((self.browse_index + 1) / total) * 100
         )
-        progress_bar.pack(pady=(0, 20))
+        progress_bar.pack(fill=tk.X, expand=True)
 
         # Otázka
         q_label = ttk.Label(
             self.main_frame,
             text=f"❓ {question.text}",
             style="Question.TLabel",
-            wraplength=600
+            wraplength=self._get_wraplength()
         )
         q_label.pack(pady=(0, 15))
 
@@ -884,7 +924,7 @@ class LearningAppGUI:
                 text=f"📌 {question.note}",
                 font=("Arial", 11, "italic"),
                 foreground="gray",
-                wraplength=600
+                wraplength=self._get_wraplength()
             )
             note_label.pack(pady=15)
 
