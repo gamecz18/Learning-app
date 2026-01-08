@@ -118,6 +118,35 @@ def load_multi_file(filepath: str) -> list[Question]:
     return questions
 
 
+def get_question_files(directory: str = "questions") -> list[str]:
+    """Vrátí seznam všech souborů s otázkami v adresáři."""
+    files = []
+
+    if not os.path.exists(directory):
+        return files
+
+    # Načtení single souborů
+    files.extend(glob.glob(os.path.join(directory, "*.single.txt")))
+
+    # Načtení multi souborů
+    files.extend(glob.glob(os.path.join(directory, "*.multi.txt")))
+
+    return sorted(files)
+
+
+def load_questions_from_files(files: list[str]) -> list[Question]:
+    """Načte otázky z konkrétních souborů."""
+    questions = []
+
+    for filepath in files:
+        if filepath.endswith('.single.txt'):
+            questions.extend(load_single_file(filepath))
+        elif filepath.endswith('.multi.txt'):
+            questions.extend(load_multi_file(filepath))
+
+    return questions
+
+
 def load_all_questions(directory: str = "questions") -> list[Question]:
     """Načte všechny otázky z adresáře."""
     questions = []
