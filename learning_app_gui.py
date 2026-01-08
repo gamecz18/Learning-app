@@ -9,7 +9,7 @@ import random
 import os
 
 # Import funkcí z původní aplikace
-from learning_app import load_all_questions, Question
+from learning_app import load_all_questions, load_questions_from_files, get_question_files, Question
 
 
 class QuizResult:
@@ -42,6 +42,15 @@ class LearningAppGUI:
         self.focus_mode_enabled = False  # Toggle pro focus mode
         self.review_index = 0  # Index pro review mode
         self.browse_index = 0  # Index pro browse mode (prohlížení všech otázek)
+
+        # Výběr souborů
+        self.available_files: list[str] = []  # Všechny dostupné soubory
+        self.selected_files: list[str] = []  # Vybrané soubory pro kvíz
+        self.file_checkboxes: dict[str, tk.BooleanVar] = {}  # Checkbox proměnné
+
+        # Filtrované review (pouze špatné odpovědi)
+        self.filtered_review_results: list[QuizResult] = []
+        self.filtered_review_index = 0
 
         # Styl
         self.style = ttk.Style()
@@ -106,7 +115,9 @@ class LearningAppGUI:
         return max(400, self.root.winfo_width() - 150)
 
     def load_questions(self):
-        """Načte všechny otázky."""
+        """Načte všechny otázky a dostupné soubory."""
+        self.available_files = get_question_files("questions")
+        self.selected_files = self.available_files.copy()  # Výchozí: všechny vybrané
         self.questions = load_all_questions("questions")
 
     def clear_frame(self):
@@ -164,11 +175,30 @@ class LearningAppGUI:
             )
             focus_info.pack()
 
+        # Info o vybraných souborech
+        files_frame = ttk.Frame(center_frame)
+        files_frame.pack(pady=10)
+
+        selected_count = len(self.selected_files)
+        total_count = len(self.available_files)
+        files_text = f"Vybrané soubory: {selected_count} / {total_count}"
+        files_label = ttk.Label(files_frame, text=files_text, foreground="gray")
+        files_label.pack()
+
+        if selected_count < total_count:
+            # Zobrazit seznam vybraných souborů
+            selected_names = [os.path.basename(f) for f in self.selected_files[:3]]
+            if len(self.selected_files) > 3:
+                selected_names.append(f"... a {len(self.selected_files) - 3} dalších")
+            selected_text = ", ".join(selected_names)
+            ttk.Label(files_frame, text=selected_text, foreground="blue", font=("Arial", 9)).pack()
+
         # Tlačítka
         btn_frame = ttk.Frame(center_frame)
         btn_frame.pack(pady=20)
 
         buttons = [
+            ("📁 Vybrat soubory s otázkami", self.show_file_selection),
             ("▶ Spustit kvíz (všechny otázky)", lambda: self.start_quiz("all")),
             ("🔤 Spustit kvíz (pouze ABCD)", lambda: self.start_quiz("abcd")),
             ("📝 Spustit kvíz (pouze otevřené)", lambda: self.start_quiz("open")),
@@ -190,6 +220,134 @@ class LearningAppGUI:
         """Znovu načte otázky."""
         self.load_questions()
         messagebox.showinfo("Info", f"Načteno {len(self.questions)} otázek.")
+        self.show_menu()
+
+    def show_file_selection(self):
+        """Zobrazí obrazovku pro výběr souborů."""
+        self.clear_frame()
+
+        # Nadpis
+        title = ttk.Label(self.main_frame, text="📁 Výběr souborů s otázkami", style="Title.TLabel")
+        title.pack(pady=(0, 20))
+
+        # Popisek
+        desc = ttk.Label(
+            self.main_frame,
+            text="Vyberte soubory, ze kterých chcete čerpat otázky:",
+            font=("Arial", 11)
+        )
+        desc.pack(pady=(0, 15))
+
+        # Tlačítka pro rychlý výběr
+        quick_frame = ttk.Frame(self.main_frame)
+        quick_frame.pack(pady=10)
+
+        ttk.Button(
+            quick_frame,
+            text="Vybrat vše",
+            command=self.select_all_files
+        ).pack(side=tk.LEFT, padx=5)
+
+        ttk.Button(
+            quick_frame,
+            text="Zrušit výběr",
+            command=self.deselect_all_files
+        ).pack(side=tk.LEFT, padx=5)
+
+        # Frame pro soubory
+        files_container = ttk.Frame(self.main_frame)
+        files_container.pack(fill=tk.BOTH, expand=True, pady=10, padx=20)
+
+        # Reset checkbox proměnných
+        self.file_checkboxes = {}
+
+        # Seznam souborů s checkboxy
+        for filepath in self.available_files:
+            file_frame = ttk.Frame(files_container)
+            file_frame.pack(fill=tk.X, pady=3)
+
+            filename = os.path.basename(filepath)
+            is_selected = filepath in self.selected_files
+
+            var = tk.BooleanVar(value=is_selected)
+            self.file_checkboxes[filepath] = var
+
+            # Spočítej počet otázek v souboru
+            if filepath.endswith('.single.txt'):
+                q_count = 1
+                file_type = "single"
+            else:
+                # Multi soubor - spočítej bloky
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    q_count = len([b for b in content.split('---') if b.strip()])
+                except Exception:
+                    q_count = "?"
+                file_type = "multi"
+
+            cb = ttk.Checkbutton(
+                file_frame,
+                text=f"{filename}",
+                variable=var
+            )
+            cb.pack(side=tk.LEFT)
+
+            # Info o souboru
+            info_text = f"({q_count} otázek)" if isinstance(q_count, int) else f"({q_count})"
+            ttk.Label(
+                file_frame,
+                text=info_text,
+                foreground="gray",
+                font=("Arial", 10)
+            ).pack(side=tk.LEFT, padx=10)
+
+        # Tlačítka
+        btn_frame = ttk.Frame(self.main_frame)
+        btn_frame.pack(pady=20)
+
+        ttk.Button(
+            btn_frame,
+            text="✓ Potvrdit výběr",
+            command=self.confirm_file_selection,
+            style="Big.TButton"
+        ).pack(side=tk.LEFT, padx=10)
+
+        ttk.Button(
+            btn_frame,
+            text="← Zpět",
+            command=self.show_menu,
+            style="Big.TButton"
+        ).pack(side=tk.LEFT, padx=10)
+
+    def select_all_files(self):
+        """Vybere všechny soubory."""
+        for var in self.file_checkboxes.values():
+            var.set(True)
+
+    def deselect_all_files(self):
+        """Zruší výběr všech souborů."""
+        for var in self.file_checkboxes.values():
+            var.set(False)
+
+    def confirm_file_selection(self):
+        """Potvrdí výběr souborů a aktualizuje otázky."""
+        self.selected_files = [
+            filepath for filepath, var in self.file_checkboxes.items()
+            if var.get()
+        ]
+
+        if not self.selected_files:
+            messagebox.showwarning("Upozornění", "Musíte vybrat alespoň jeden soubor!")
+            return
+
+        # Načtení otázek z vybraných souborů
+        self.questions = load_questions_from_files(self.selected_files)
+
+        messagebox.showinfo(
+            "Info",
+            f"Načteno {len(self.questions)} otázek z {len(self.selected_files)} souborů."
+        )
         self.show_menu()
 
     def toggle_focus_mode(self):
@@ -573,19 +731,20 @@ class LearningAppGUI:
 
         total = len(self.current_questions)
         percentage = (self.correct_count / total) * 100 if total > 0 else 0
+        wrong_count = total - self.correct_count
 
         # Nadpis
         title = ttk.Label(self.main_frame, text="📊 Výsledky", style="Title.TLabel")
-        title.pack(pady=(0, 30))
+        title.pack(pady=(0, 20))
 
         # Skóre
         score_text = f"Správné odpovědi: {self.correct_count} / {total}"
         score = ttk.Label(self.main_frame, text=score_text, font=("Arial", 18))
-        score.pack(pady=10)
+        score.pack(pady=5)
 
         # Procenta
         percent = ttk.Label(self.main_frame, text=f"{percentage:.1f}%", font=("Arial", 24, "bold"))
-        percent.pack(pady=10)
+        percent.pack(pady=5)
 
         # Hodnocení
         if percentage >= 90:
@@ -598,7 +757,7 @@ class LearningAppGUI:
             rating = "💪 Nevzdávej to!"
 
         rating_label = ttk.Label(self.main_frame, text=rating, font=("Arial", 16))
-        rating_label.pack(pady=10)
+        rating_label.pack(pady=5)
 
         # Progress bar - responzivní
         progress_frame = ttk.Frame(self.main_frame)
@@ -610,6 +769,111 @@ class LearningAppGUI:
             value=percentage
         )
         result_bar.pack(fill=tk.X, expand=True)
+
+        # === PŘEHLED ODPOVĚDÍ ===
+        overview_frame = ttk.LabelFrame(self.main_frame, text="Přehled odpovědí", padding=10)
+        overview_frame.pack(fill=tk.X, pady=15, padx=20)
+
+        # Statistiky správných a špatných
+        stats_frame = ttk.Frame(overview_frame)
+        stats_frame.pack(fill=tk.X, pady=(0, 10))
+
+        ttk.Label(
+            stats_frame,
+            text=f"✅ Správně: {self.correct_count}",
+            font=("Arial", 12),
+            foreground="green"
+        ).pack(side=tk.LEFT, padx=20)
+
+        ttk.Label(
+            stats_frame,
+            text=f"❌ Špatně: {wrong_count}",
+            font=("Arial", 12),
+            foreground="red"
+        ).pack(side=tk.LEFT, padx=20)
+
+        # Grid s přehledem všech otázek
+        grid_frame = ttk.Frame(overview_frame)
+        grid_frame.pack(fill=tk.X, pady=5)
+
+        # Zobrazení otázek jako tlačítka v gridu
+        cols = 10  # Počet tlačítek na řádek
+        for i, result in enumerate(self.quiz_results):
+            row = i // cols
+            col = i % cols
+
+            is_correct = result.is_correct
+            btn_text = str(i + 1)
+            bg_color = "#90EE90" if is_correct else "#FFB6C1"  # Light green / Light pink
+
+            btn = tk.Button(
+                grid_frame,
+                text=btn_text,
+                width=3,
+                height=1,
+                bg=bg_color,
+                activebackground=bg_color,
+                command=lambda idx=i: self.goto_review(idx)
+            )
+            btn.grid(row=row, column=col, padx=2, pady=2)
+
+        # Legenda
+        legend_frame = ttk.Frame(overview_frame)
+        legend_frame.pack(fill=tk.X, pady=(10, 0))
+
+        tk.Label(legend_frame, text="  ", bg="#90EE90", width=2).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(legend_frame, text="Správně", font=("Arial", 10)).pack(side=tk.LEFT, padx=(0, 20))
+
+        tk.Label(legend_frame, text="  ", bg="#FFB6C1", width=2).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(legend_frame, text="Špatně", font=("Arial", 10)).pack(side=tk.LEFT)
+
+        ttk.Label(
+            legend_frame,
+            text="(Klikni na číslo pro detail)",
+            font=("Arial", 9),
+            foreground="gray"
+        ).pack(side=tk.RIGHT)
+
+        # === RYCHLÁ NAVIGACE NA ŠPATNÉ ODPOVĚDI ===
+        wrong_indices = [i for i, r in enumerate(self.quiz_results) if not r.is_correct]
+        if wrong_indices:
+            wrong_frame = ttk.LabelFrame(self.main_frame, text="Špatně zodpovězené otázky", padding=10)
+            wrong_frame.pack(fill=tk.X, pady=10, padx=20)
+
+            # Seznam špatných otázek s rychlým přístupem
+            for idx in wrong_indices:
+                result = self.quiz_results[idx]
+                question = result.question
+
+                item_frame = ttk.Frame(wrong_frame)
+                item_frame.pack(fill=tk.X, pady=3)
+
+                # Tlačítko s číslem
+                btn = tk.Button(
+                    item_frame,
+                    text=str(idx + 1),
+                    width=3,
+                    bg="#FFB6C1",
+                    command=lambda i=idx: self.goto_review(i)
+                )
+                btn.pack(side=tk.LEFT, padx=(0, 10))
+
+                # Zkrácený text otázky
+                q_text = question.text[:60] + "..." if len(question.text) > 60 else question.text
+                ttk.Label(
+                    item_frame,
+                    text=q_text,
+                    font=("Arial", 10),
+                    foreground="gray"
+                ).pack(side=tk.LEFT, fill=tk.X)
+
+            # Tlačítko pro zobrazení pouze špatných
+            ttk.Button(
+                wrong_frame,
+                text="📋 Projít pouze špatné odpovědi",
+                command=self.start_wrong_review,
+                style="Big.TButton"
+            ).pack(pady=(10, 0))
 
         # Info o focus mode
         if self.wrong_questions:
@@ -626,7 +890,7 @@ class LearningAppGUI:
 
         ttk.Button(
             btn_frame,
-            text="📋 Projít otázky",
+            text="📋 Projít všechny otázky",
             command=self.start_review,
             style="Big.TButton"
         ).pack(side=tk.LEFT, padx=10)
@@ -644,6 +908,154 @@ class LearningAppGUI:
             command=self.show_menu,
             style="Big.TButton"
         ).pack(side=tk.LEFT, padx=10)
+
+    def start_wrong_review(self):
+        """Spustí review mode pouze pro špatně zodpovězené otázky."""
+        wrong_results = [r for r in self.quiz_results if not r.is_correct]
+        if not wrong_results:
+            messagebox.showinfo("Info", "Žádné špatné odpovědi k zobrazení!")
+            return
+        self.filtered_review_results = wrong_results
+        self.filtered_review_index = 0
+        self.show_filtered_review()
+
+    def show_filtered_review(self):
+        """Zobrazí otázku ve filtrovaném review mode (pouze špatné)."""
+        self.clear_frame()
+
+        result = self.filtered_review_results[self.filtered_review_index]
+        question = result.question
+        total = len(self.filtered_review_results)
+
+        # Header
+        header_frame = ttk.Frame(self.main_frame)
+        header_frame.pack(fill=tk.X, pady=(0, 10))
+
+        ttk.Label(
+            header_frame,
+            text=f"❌ Špatné odpovědi ({self.filtered_review_index + 1}/{total})",
+            style="Title.TLabel"
+        ).pack(side=tk.LEFT)
+
+        # Progress bar
+        progress_frame = ttk.Frame(self.main_frame)
+        progress_frame.pack(fill=tk.X, pady=(0, 20), padx=40)
+
+        progress_bar = ttk.Progressbar(
+            progress_frame,
+            mode="determinate",
+            value=((self.filtered_review_index + 1) / total) * 100
+        )
+        progress_bar.pack(fill=tk.X, expand=True)
+
+        # Otázka
+        q_type = "📝" if question.is_open else "🔤"
+        q_label = ttk.Label(
+            self.main_frame,
+            text=f"{q_type} {question.text}",
+            style="Question.TLabel",
+            wraplength=self._get_wraplength()
+        )
+        q_label.pack(pady=(0, 15), fill=tk.X)
+
+        # Odpovědi
+        if question.is_open:
+            answer_frame = ttk.Frame(self.main_frame)
+            answer_frame.pack(fill=tk.X, pady=5, padx=20)
+
+            ttk.Label(
+                answer_frame,
+                text=f"Tvá odpověď: {result.user_answer}",
+                font=("Arial", 12),
+                foreground="red"
+            ).pack(anchor="w")
+
+            ttk.Label(
+                answer_frame,
+                text=f"Správná odpověď: {question.correct_answer}",
+                font=("Arial", 12),
+                foreground="green"
+            ).pack(anchor="w", pady=(5, 0))
+        else:
+            options_frame = ttk.Frame(self.main_frame)
+            options_frame.pack(fill=tk.X, pady=5, padx=20)
+
+            for letter in sorted(question.options.keys()):
+                is_correct = letter == question.correct_answer.upper()
+                is_user_answer = letter == result.user_answer
+
+                if is_correct:
+                    color = "green"
+                    prefix = "✓ "
+                elif is_user_answer and not is_correct:
+                    color = "red"
+                    prefix = "✗ "
+                else:
+                    color = "black"
+                    prefix = "  "
+
+                option_text = f"{prefix}{letter}) {question.options[letter]}"
+                if is_user_answer:
+                    option_text += " (tvá odpověď)"
+
+                ttk.Label(
+                    options_frame,
+                    text=option_text,
+                    font=("Arial", 12),
+                    foreground=color
+                ).pack(anchor="w", pady=2)
+
+        # Poznámka
+        if question.note:
+            note_label = ttk.Label(
+                self.main_frame,
+                text=f"📌 {question.note}",
+                font=("Arial", 11, "italic"),
+                foreground="gray",
+                wraplength=self._get_wraplength()
+            )
+            note_label.pack(pady=15)
+
+        # Navigační tlačítka
+        nav_frame = ttk.Frame(self.main_frame)
+        nav_frame.pack(pady=20)
+
+        prev_btn = ttk.Button(
+            nav_frame,
+            text="← Předchozí",
+            command=self.prev_filtered_review,
+            style="Big.TButton",
+            state=tk.NORMAL if self.filtered_review_index > 0 else tk.DISABLED
+        )
+        prev_btn.pack(side=tk.LEFT, padx=10)
+
+        ttk.Button(
+            nav_frame,
+            text="🏠 Zpět na výsledky",
+            command=self.show_results,
+            style="Big.TButton"
+        ).pack(side=tk.LEFT, padx=10)
+
+        next_btn = ttk.Button(
+            nav_frame,
+            text="Další →",
+            command=self.next_filtered_review,
+            style="Big.TButton",
+            state=tk.NORMAL if self.filtered_review_index < total - 1 else tk.DISABLED
+        )
+        next_btn.pack(side=tk.LEFT, padx=10)
+
+    def prev_filtered_review(self):
+        """Přejde na předchozí otázku ve filtrovaném review."""
+        if self.filtered_review_index > 0:
+            self.filtered_review_index -= 1
+            self.show_filtered_review()
+
+    def next_filtered_review(self):
+        """Přejde na další otázku ve filtrovaném review."""
+        if self.filtered_review_index < len(self.filtered_review_results) - 1:
+            self.filtered_review_index += 1
+            self.show_filtered_review()
 
     def start_review(self):
         """Spustí review mode pro procházení otázek."""
