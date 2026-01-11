@@ -52,6 +52,9 @@ class LearningAppGUI:
         self.filtered_review_results: list[QuizResult] = []
         self.filtered_review_index = 0
 
+        # Zamíchané odpovědi pro každou otázku (index -> {shuffled_options, shuffled_correct})
+        self.shuffled_answers: dict[int, dict] = {}
+
         # Styl
         self.style = ttk.Style()
         self.style.configure("Title.TLabel", font=("Arial", 18, "bold"))
@@ -119,6 +122,48 @@ class LearningAppGUI:
         self.available_files = get_question_files("questions")
         self.selected_files = self.available_files.copy()  # Výchozí: všechny vybrané
         self.questions = load_all_questions("questions")
+
+    def shuffle_question_options(self, question: Question, question_index: int) -> tuple[dict, str, dict]:
+        """
+        Zamíchá pořadí odpovědí u ABCD otázky.
+        Vrátí tuple (zamíchané_options, nová_správná_odpověď, mapování_nové_na_původní).
+        Zamíchané odpovědi se ukládají, aby byly konzistentní při navigaci zpět.
+        """
+        # Pokud už máme zamíchané odpovědi pro tuto otázku, použijeme je
+        if question_index in self.shuffled_answers:
+            cached = self.shuffled_answers[question_index]
+            return cached["options"], cached["correct"], cached["mapping"]
+
+        # Získáme originální možnosti a správnou odpověď
+        original_options = question.options
+        original_correct = question.correct_answer.upper()
+
+        # Vytvoříme seznam písmenek (A, B, C, D)
+        letters = sorted(original_options.keys())
+
+        # Vytvoříme seznam dvojic (písmeno, text) a zamícháme
+        option_pairs = [(letter, original_options[letter]) for letter in letters]
+        random.shuffle(option_pairs)
+
+        # Vytvoříme nový slovník s přeřazenými písmeny a mapování
+        shuffled_options = {}
+        new_to_original = {}  # Mapování nového písmena na původní
+        new_correct = ""
+
+        for new_letter, (old_letter, text) in zip(letters, option_pairs):
+            shuffled_options[new_letter] = text
+            new_to_original[new_letter] = old_letter
+            if old_letter == original_correct:
+                new_correct = new_letter
+
+        # Uložíme pro pozdější použití
+        self.shuffled_answers[question_index] = {
+            "options": shuffled_options,
+            "correct": new_correct,
+            "mapping": new_to_original
+        }
+
+        return shuffled_options, new_correct, new_to_original
 
     def clear_frame(self):
         """Vyčistí hlavní frame."""
@@ -359,6 +404,7 @@ class LearningAppGUI:
         # Resetování výsledků kvízu
         self.quiz_results = []
         self.quiz_answers = {}  # Slovník pro ukládání odpovědí podle indexu
+        self.shuffled_answers = {}  # Reset zamíchaných odpovědí pro nový kvíz
 
         # Výběr otázek podle typu a focus mode
         if self.focus_mode_enabled and self.wrong_questions:
@@ -432,18 +478,22 @@ class LearningAppGUI:
         # Zkontroluj, jestli už byla otázka zodpovězena
         prev_answer = self.quiz_answers.get(self.current_index)
 
-        self.selected_option = tk.StringVar(value=prev_answer["answer"] if prev_answer else "")
+        # Získej zamíchané odpovědi pro tuto otázku
+        shuffled_options, shuffled_correct, _ = self.shuffle_question_options(question, self.current_index)
+
+        self.selected_option = tk.StringVar(value=prev_answer["shuffled_answer"] if prev_answer else "")
 
         options_frame = ttk.Frame(self.main_frame)
         options_frame.pack(fill=tk.BOTH, expand=True, pady=10)
 
-        for letter in sorted(question.options.keys()):
+        # Použij zamíchané odpovědi místo originálních
+        for letter in sorted(shuffled_options.keys()):
             option_frame = ttk.Frame(options_frame)
             option_frame.pack(fill=tk.X, pady=5, padx=20)
 
             rb = ttk.Radiobutton(
                 option_frame,
-                text=f"{letter}) {question.options[letter]}",
+                text=f"{letter}) {shuffled_options[letter]}",
                 value=letter,
                 variable=self.selected_option,
                 style="Option.TRadiobutton"
@@ -463,9 +513,10 @@ class LearningAppGUI:
             if prev_answer["correct"]:
                 self.feedback_label.config(text="✅ Správně!", foreground="green")
             else:
-                correct_text = question.options.get(question.correct_answer.upper(), "")
+                # Použij zamíchané hodnoty pro zobrazení správné odpovědi
+                correct_text = shuffled_options.get(shuffled_correct, "")
                 self.feedback_label.config(
-                    text=f"❌ Špatně. Správná odpověď: {question.correct_answer}) {correct_text}",
+                    text=f"❌ Špatně. Správná odpověď: {shuffled_correct}) {correct_text}",
                     foreground="red",
                     wraplength=self._get_wraplength()
                 )
@@ -618,22 +669,33 @@ class LearningAppGUI:
             return
 
         self.answered = True
-        correct = answer == question.correct_answer.upper()
 
-        # Uložení výsledku
-        result = QuizResult(question, answer, correct)
+        # Získej zamíchané hodnoty pro kontrolu
+        shuffled_options, shuffled_correct, new_to_original = self.shuffle_question_options(question, self.current_index)
+        correct = answer == shuffled_correct
+
+        # Převeď zamíchané písmeno zpět na originální pro review mode
+        original_answer = new_to_original.get(answer, answer)
+
+        # Uložení výsledku s originálním písmenem (pro review mode)
+        result = QuizResult(question, original_answer, correct)
         self.quiz_results.append(result)
 
-        # Uložení do quiz_answers pro navigaci
-        self.quiz_answers[self.current_index] = {"answer": answer, "correct": correct}
+        # Uložení do quiz_answers pro navigaci (zamíchané písmeno pro zobrazení)
+        self.quiz_answers[self.current_index] = {
+            "answer": original_answer,
+            "shuffled_answer": answer,
+            "correct": correct
+        }
 
         if correct:
             self.correct_count += 1
             self.feedback_label.config(text="✅ Správně!", foreground="green")
         else:
-            correct_text = question.options.get(question.correct_answer.upper(), "")
+            # Použij zamíchané hodnoty pro zobrazení správné odpovědi
+            correct_text = shuffled_options.get(shuffled_correct, "")
             self.feedback_label.config(
-                text=f"❌ Špatně. Správná odpověď: {question.correct_answer}) {correct_text}",
+                text=f"❌ Špatně. Správná odpověď: {shuffled_correct}) {correct_text}",
                 foreground="red",
                 wraplength=self._get_wraplength()
             )
@@ -663,8 +725,12 @@ class LearningAppGUI:
         result = QuizResult(question, answer, correct)
         self.quiz_results.append(result)
 
-        # Uložení do quiz_answers pro navigaci
-        self.quiz_answers[self.current_index] = {"answer": answer, "correct": correct}
+        # Uložení do quiz_answers pro navigaci (pro otevřené otázky je answer stejný)
+        self.quiz_answers[self.current_index] = {
+            "answer": answer,
+            "shuffled_answer": answer,  # Pro konzistenci s ABCD
+            "correct": correct
+        }
 
         if correct:
             self.correct_count += 1
